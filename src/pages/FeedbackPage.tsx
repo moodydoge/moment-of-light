@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { useCompanion } from '../context/CompanionContext'
 import { useServices } from '../context/ServicesContext'
 import { useSession } from '../context/SessionContext'
 import type { SessionFeedback } from '../types'
@@ -10,20 +11,29 @@ type Choice = SessionFeedback['choice']
 export function FeedbackPage() {
   const navigate = useNavigate()
   const { session } = useSession()
+  const companion = useCompanion()
   const { feedback } = useServices()
   const [busy, setBusy] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
-  if (!session) return <Navigate to="/" replace />
+  const humanRole = companion.humanSession?.role
+  const role = humanRole || session?.role
+  const canStay = Boolean(session || companion.humanSession)
+
+  if (!canStay) return <Navigate to="/" replace />
 
   const submit = async (choice: Choice) => {
     setBusy(true)
     try {
-      await feedback.submit({
-        sessionId: session.id,
-        role: session.role,
-        choice,
-      })
+      if (companion.humanSession) {
+        await companion.submitFeedback(choice, role || 'guest')
+      } else if (session) {
+        await feedback.submit({
+          sessionId: session.id,
+          role: session.role,
+          choice,
+        })
+      }
       setSubmitted(true)
     } finally {
       setBusy(false)
@@ -48,12 +58,19 @@ export function FeedbackPage() {
         <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-card)] p-5">
           <p>感谢你的反馈。</p>
           <div className="mt-4">
-            <Button onClick={() => navigate('/')}>回到首页</Button>
+            <Button
+              onClick={() => {
+                companion.clearHumanRound()
+                navigate('/')
+              }}
+            >
+              回到首页
+            </Button>
           </div>
         </div>
       ) : (
         <div className="space-y-3">
-          {session.role === 'responder' ? (
+          {role === 'responder' ? (
             <Button
               fullWidth
               variant="human"
@@ -75,12 +92,7 @@ export function FeedbackPage() {
               </Button>
             ))
           )}
-          <Button
-            fullWidth
-            variant="ghost"
-            disabled={busy}
-            onClick={() => void submit('skipped')}
-          >
+          <Button fullWidth variant="ghost" disabled={busy} onClick={() => void submit('skipped')}>
             跳过反馈
           </Button>
         </div>

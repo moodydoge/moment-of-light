@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   handleAiChatRequest,
   handleAiStatusRequest,
   resetAiRateLimitForTests,
 } from './aiHandler'
+
+beforeEach(() => {
+  resetAiRateLimitForTests()
+  vi.unstubAllGlobals()
+  delete process.env.MOL_AI_API_KEY
+  delete process.env.MOL_AI_BASE_URL
+  delete process.env.MOL_AI_MODEL
+})
 
 afterEach(() => {
   resetAiRateLimitForTests()

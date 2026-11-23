@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
+import { useCompanion } from '../context/CompanionContext'
 import { useSession } from '../context/SessionContext'
 import { TopicCards } from '../features/companion/TopicCards'
 import { MOOD_TAGS } from '../lib/topics'
@@ -9,6 +10,7 @@ import { cn } from '../lib/cn'
 export function StartCompanionPage() {
   const navigate = useNavigate()
   const { startSession } = useSession()
+  const { clearHumanRound } = useCompanion()
   const [moodNote, setMoodNote] = useState('')
   const [topicIds, setTopicIds] = useState<string[]>(['say-anything'])
   const [moodTag, setMoodTag] = useState<string | null>('lonely')
@@ -24,6 +26,8 @@ export function StartCompanionPage() {
   const begin = async () => {
     setBusy(true)
     try {
+      // Drop previous ended human round so /chat won't bounce back to feedback.
+      clearHumanRound()
       const tagLabel = MOOD_TAGS.find((t) => t.id === moodTag)?.label
       const note = [tagLabel, moodNote.trim()].filter(Boolean).join(' · ')
       await startSession({

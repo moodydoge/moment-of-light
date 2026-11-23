@@ -1,4 +1,5 @@
 import { Link, Outlet } from 'react-router-dom'
+import { useCompanion } from '../../context/CompanionContext'
 import { useServices } from '../../context/ServicesContext'
 import { useTheme } from '../../context/ThemeContext'
 import { Button } from '../ui/Button'
@@ -6,11 +7,14 @@ import { Button } from '../ui/Button'
 export function AppShell() {
   const { theme, toggleTheme } = useTheme()
   const { ai, aiStatus } = useServices()
+  const companion = useCompanion()
 
   const badge =
     ai.kind === 'live'
       ? `真实 AI${aiStatus.model ? ` · ${aiStatus.model}` : ''}`
-      : '演示模式'
+      : 'AI 演示'
+  const humanBadge =
+    companion.status?.kind === 'live-controlled' ? '真人受控试点' : null
 
   return (
     <div className="min-h-dvh bg-[var(--color-page)] text-[var(--color-ink)]">
@@ -27,6 +31,11 @@ export function AppShell() {
             <span className="rounded-full bg-[var(--color-muted-bg)] px-3 py-1 text-xs text-[var(--color-ink-soft)]">
               {badge}
             </span>
+            {humanBadge ? (
+              <span className="rounded-full bg-[var(--color-human)]/15 px-3 py-1 text-xs text-[var(--color-human)]">
+                {humanBadge}
+              </span>
+            ) : null}
             <Button
               variant="ghost"
               className="px-3 text-sm"

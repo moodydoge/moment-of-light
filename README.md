@@ -7,10 +7,11 @@
 ## 技术栈
 
 - React 19 + TypeScript
-- Vite（内嵌服务端 AI 代理）
+- Vite（内嵌 AI 代理 + Companion 受控服务）
 - Tailwind CSS v4
 - React Router
 - Vitest
+- SQLite（`node:sqlite`）+ WebSocket
 
 ## 本地启动
 
@@ -24,14 +25,18 @@ npm run dev
 ### 启用真实 AI
 
 1. 复制 `.env.example` 为 `.env`
-2. 填入已获授权的 `MOL_AI_API_KEY`，以及兼容 OpenAI Chat Completions 的 `MOL_AI_BASE_URL` / `MOL_AI_MODEL`
-3. 重新执行 `npm run dev`
+2. 配置 `MOL_AI_API_KEY` / `MOL_AI_BASE_URL` / `MOL_AI_MODEL`
+3. 重启 `npm run dev`
 
-未配置密钥时，界面会明确使用 **演示适配器**，不会伪装成真实模型成功。
+### 真人受控试点
 
-密钥只在 Vite 服务端中间件读取，不会打包进浏览器。详见 [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md)。
+开发服务器已内置 Companion API（无需额外云账号）：
 
-其他命令：
+- 访客身份由服务端签发
+- 请求池 / 申请 / 双方确认 / 真人消息为真实跨端同步
+- **尚未对公众无限制开放**
+
+双浏览器步骤见 [docs/M3_DUAL_BROWSER_TEST.md](docs/M3_DUAL_BROWSER_TEST.md)。
 
 ```bash
 npm run lint
@@ -41,37 +46,30 @@ npm run build
 
 ## 当前已实现
 
-### Milestone 1
+### Milestone 1–2
 
-- 暖纸风移动优先页面与日/夜主题
-- 发起陪伴、善意响应池（演示）、结束反馈
-- 可替换服务适配层与安全 UI 边界
+首页与流程、DeepSeek 真实 AI、安全 UI 边界。详见 `CHANGELOG.md`。
 
-### Milestone 2
+### Milestone 3（受控试点）
 
-- 真实 AI 服务端代理（OpenAI 兼容 `/chat/completions`）
-- 连续对话上下文（内存、短窗口，默认不落库）
-- 生成中 / 取消 / 失败重试 / 结束停止迟到回复
-- 独立系统提示词与危机审慎引导
-- 话题卡静态展示（发送或填入输入框）
-- 演示 AI 与真实 AI 明确区分
+- 真实善意响应池与双方确认匹配
+- 真人实时文字（WebSocket + 轮询兜底）
+- 原子占位、会话 ACL、举报/阻止落库
+- 真人加入后 AI 改为可选话题建议
 
-## 尚未实现
+## 尚未实现 / 需你确认
 
-- 已授权额度下的正式线上模型托管
-- 真人实时通信与服务端匹配
-- WorkBuddy 正式发布绑定
-- 可靠年龄验证与内容治理闭环
+- 托管云（如 Supabase Auth+RLS+Realtime）或正式公网部署
+- 严格年龄核验与完整内容治理人工闭环
+- WorkBuddy 正式发布
 
-## 演示说明
+云变更清单见 [docs/M3_DESIGN.md](docs/M3_DESIGN.md) — **未擅自开通付费资源**。
 
-- 真人匹配仍为演示数据与演示控制，标注「演示 / 非真实用户」
-- 无密钥时 AI 为演示适配器；有密钥时消息不再标 `isDemo`
-
-详见：
+## 文档
 
 - [docs/PRD.md](docs/PRD.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/SAFETY.md](docs/SAFETY.md)
 - [docs/AI_INTEGRATION.md](docs/AI_INTEGRATION.md)
+- [docs/M3_DESIGN.md](docs/M3_DESIGN.md)
 - [AGENTS.md](AGENTS.md)

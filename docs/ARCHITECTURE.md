@@ -27,9 +27,10 @@ AI 私聊与公开请求有明确边界：开放请求默认只暴露话题标�
 | 接口 | 职责 | 当前实现 |
 |---|---|---|
 | `CompanionAIService` | 话题卡与回复（含 history / AbortSignal） | `LiveAIService` 或 `DemoAIService` |
-| `MatchingService` | 请求开放 / 列表 / 接入确认 | `DemoMatchingService`（仍为演示） |
-| `ChatService` | 消息收发（内存） | `DemoChatService` |
-| `FeedbackService` | 反馈 / 举报 / 阻止 | `DemoFeedbackService` |
+| `MatchingService` | 请求开放 / 列表 / 接入确认 | UI 已切换到 Companion API；旧 demo 仅作回退 |
+| Companion API | `/api/companion/*` | 受控试点：HMAC 访客 + SQLite + WS |
+| `ChatService` | AI 侧消息（内存） | `DemoChatService`；真人消息走 Companion |
+| `FeedbackService` | 反馈 / 举报 / 阻止 | 真人路径走 Companion；AI-only 仍可用 demo |
 
 AI 生成状态（`AiGenerationStatus`）：`idle | generating | success | failed | cancelled | ended`
 

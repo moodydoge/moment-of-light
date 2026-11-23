@@ -17,6 +17,7 @@ interface ReportBlockModalProps {
   sessionId: string
   onClose: () => void
   onBlocked?: () => void
+  onReport?: (reason: string, detail?: string) => Promise<void> | void
 }
 
 export function ReportBlockModal({
@@ -24,6 +25,7 @@ export function ReportBlockModal({
   sessionId,
   onClose,
   onBlocked,
+  onReport,
 }: ReportBlockModalProps) {
   const { feedback } = useServices()
   const [reason, setReason] = useState<ReportReason>('harassment')
@@ -34,14 +36,19 @@ export function ReportBlockModal({
   const submitReport = async () => {
     setBusy(true)
     try {
-      await feedback.report({
-        sessionId,
-        target: 'human_participant',
-        reason,
-        detail: detail.trim() || undefined,
-        demo: true,
-      })
-      setDone('已记录举报（演示）。正式环境将由服务端处理。')
+      if (onReport) {
+        await onReport(reason, detail.trim() || undefined)
+        setDone('已记录举报（服务端）。后续可由人工处理。')
+      } else {
+        await feedback.report({
+          sessionId,
+          target: 'human_participant',
+          reason,
+          detail: detail.trim() || undefined,
+          demo: true,
+        })
+        setDone('已记录举报（演示回退）。')
+      }
     } finally {
       setBusy(false)
     }
@@ -50,9 +57,13 @@ export function ReportBlockModal({
   const submitBlock = async () => {
     setBusy(true)
     try {
-      await feedback.block({ sessionId, demo: true })
-      setDone('已阻止对方（演示）。会话将结束。')
-      onBlocked?.()
+      if (onBlocked) {
+        onBlocked()
+        setDone('已提交阻止并结束会话。')
+      } else {
+        await feedback.block({ sessionId, demo: true })
+        setDone('已阻止对方（演示）。会话将结束。')
+      }
     } finally {
       setBusy(false)
     }
@@ -86,7 +97,7 @@ export function ReportBlockModal({
       ) : (
         <div className="space-y-3">
           <p className="text-sm">
-            你可以举报不当行为，或阻止对方继续交流。本入口在首轮为 UI 与接口边界演示。
+            举报会写入服务端记录；阻止由服务端执行，防止受控试点中再次匹配。
           </p>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium text-[var(--color-ink)]">举报原因</legend>

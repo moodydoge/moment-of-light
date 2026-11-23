@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
 import { viteAiPlugin } from './server/viteAiPlugin'
+import { viteCompanionPlugin } from './server/companion/viteCompanionPlugin'
 
 export default defineConfig(({ mode }) => {
   // Load .env* into process.env for the AI proxy (keys stay server-side).
@@ -12,7 +13,7 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react(), tailwindcss(), viteAiPlugin()],
+    plugins: [react(), tailwindcss(), viteAiPlugin(), viteCompanionPlugin()],
     server: {
       host: '127.0.0.1',
       port: 5174,
