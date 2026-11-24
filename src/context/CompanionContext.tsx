@@ -75,7 +75,11 @@ interface CompanionContextValue {
   humanSession: HumanSession | null
   humanMessages: HumanMessage[]
   myOpenRequestId: string | null
-  bootstrapGuest: (input: { nickname?: string; adultAcknowledged: boolean }) => Promise<void>
+  bootstrapGuest: (input: {
+    nickname?: string
+    adultAcknowledged: boolean
+    inviteCode?: string
+  }) => Promise<void>
   refreshPool: () => Promise<void>
   refreshIncoming: () => Promise<void>
   openRequest: (topicTag: string) => Promise<PoolRequest>
@@ -225,7 +229,11 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
   }, [loadSessionMessages, profile, refreshIncoming, refreshPool])
 
   const bootstrapGuest = useCallback(
-    async (input: { nickname?: string; adultAcknowledged: boolean }) => {
+    async (input: {
+      nickname?: string
+      adultAcknowledged: boolean
+      inviteCode?: string
+    }) => {
       setError(null)
       const next = await ensureGuestProfile(input)
       setProfile(next)

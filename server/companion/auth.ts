@@ -39,13 +39,31 @@ function sign(payloadB64: string) {
   return b64url(createHmac('sha256', secret()).update(payloadB64).digest())
 }
 
+export function inviteCodeRequired(): boolean {
+  return Boolean(process.env.MOL_COMPANION_INVITE_CODE?.trim())
+}
+
+export function assertInviteCode(inviteCode?: string) {
+  const expected = process.env.MOL_COMPANION_INVITE_CODE?.trim()
+  if (!expected) return
+  const got = (inviteCode || '').trim()
+  if (!got || got !== expected) {
+    throw Object.assign(
+      new Error('需要有效邀请码才能进入受控真人试点。邀请码由组织者线下发放。'),
+      { status: 403, code: 'INVITE_REQUIRED' },
+    )
+  }
+}
+
 export function issueGuestToken(input: {
   nickname?: string
   adultAcknowledged: boolean
+  inviteCode?: string
 }): { token: string; identity: GuestIdentity } {
   if (!input.adultAcknowledged) {
     throw new Error('必须确认本受控试点仅面向成年人（声明不等于严格年龄核验）。')
   }
+  assertInviteCode(input.inviteCode)
   const now = Date.now()
   const identity: GuestIdentity = {
     userId: `u_${randomBytes(8).toString('hex')}`,

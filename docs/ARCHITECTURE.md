@@ -43,9 +43,16 @@ AI 生成状态（`AiGenerationStatus`）：`idle | generating | success | faile
 
 未配置密钥时 `kind` 保持 `demo`，UI 明确标注；不得把 demo 改称 live。
 
+## 生产入口（M4.5）
+
+- 开发：`npm run dev`（Vite `configureServer` 挂载 AI + Companion + WS）
+- 生产：`npm run build` → `npm run start`（`server/prodServer.ts`：静态 `dist/` + `/api/ai/*` + `/api/companion/*` + `/api/companion/ws` + `/healthz`）
+- `server/standalone.mjs` **仅** AI 代理，不含 Companion，不可单独作为真人通道生产入口
+- 跨域可选：构建期 `VITE_MOL_API_BASE` + 运行期 `MOL_CORS_ORIGINS`；推荐同源反代以简化 WSS
+
 ## 未来接入方向
 
-1. **正式托管 AI 代理**：独立 Node/云函数 + 鉴权与额度治理。  
-2. **真人实时通信**：WebSocket / 云即时消息；需服务端会话授权与访问控制。  
-3. **匹配**：请求入库、双向确认、超时、限流、举报处置。  
-4. **发布**：WorkBuddy 轻量发布或其他托管方案按实际环境确认。
+1. **正式托管**：轻量云主机或容器云托管跑 `prodServer`（见 `docs/M4_5_DEPLOYMENT_DECISION.md`）。
+2. **真人实时通信**：已用原生 WebSocket（`ws`）+ 4s 轮询兜底；多实例需共享会话层（当前单实例内存 hub）。
+3. **匹配**：请求入库、双向确认、超时、限流、举报处置（受控试点已具备基础版）。
+4. **发布**：WorkBuddy 可只发静态；完整能力依赖上述 Node 服务。

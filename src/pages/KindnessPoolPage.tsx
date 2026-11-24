@@ -32,14 +32,23 @@ export function KindnessPoolPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!profile) return
-    setLoading(true)
-    void refreshPool()
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false))
+    let cancelled = false
+    void (async () => {
+      try {
+        await refreshPool()
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [profile, refreshPool])
 
   useEffect(() => {

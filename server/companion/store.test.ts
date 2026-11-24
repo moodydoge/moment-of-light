@@ -86,7 +86,7 @@ describe('CompanionStore matching', () => {
       content: '你好',
       clientMessageId: 'c1',
     })
-    expect(second.id).toBe(first.id)
+    expect(second.message.id).toBe(first.message.id)
 
     store.endSession(owner, session.id)
     expect(() =>
@@ -104,5 +104,46 @@ describe('CompanionStore matching', () => {
     const req = store.openRequest(owner, '话题')
     store.block(owner, responder.userId)
     expect(() => store.applyToRequest(responder, req.id)).toThrow(/无法申请/)
+  })
+
+  it('rejects contact leakage and attaches crisis tip', () => {
+    const owner = guest('u_owner', '发起者')
+    const responder = guest('u_res', '响应者')
+    const req = store.openRequest(owner, '话题')
+    const app = store.applyToRequest(responder, req.id)
+    const session = store.acceptApplication(owner, app.applicationId)
+
+    expect(() =>
+      store.sendMessage(owner, {
+        sessionId: session.id,
+        content: '加我微信 abc123',
+        clientMessageId: 'leak1',
+      }),
+    ).toThrow(/联系方式/)
+
+    const result = store.sendMessage(owner, {
+      sessionId: session.id,
+      content: '我有点不想活了',
+      clientMessageId: 'crisis1',
+    })
+    expect(result.crisisTip?.senderRole).toBe('system')
+    expect(result.crisisTip?.content).toMatch(/现实帮助|紧急援助/)
+
+    const reports = store.report(responder, {
+      sessionId: session.id,
+      targetUserId: owner.userId,
+      reason: 'abuse',
+    })
+    expect(store.listReports()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: reports.id })]),
+    )
+    expect(store.markReportReviewed(reports.id).ok).toBe(true)
+  })
+
+  it('does not expose ownerId in public request payload', () => {
+    const owner = guest('u_owner_secret', '发起者')
+    const req = store.openRequest(owner, '随便聊聊')
+    expect(req).not.toHaveProperty('ownerId')
+    expect(JSON.stringify(req)).not.toContain('u_owner_secret')
   })
 })

@@ -1,3 +1,4 @@
+import { apiUrl } from '../../lib/apiBase'
 import { createId } from '../../lib/id'
 import { TOPIC_CARDS } from '../../lib/topics'
 import type { ChatMessage } from '../../types'
@@ -20,7 +21,7 @@ export class LiveAIService implements CompanionAIService {
   }
 
   async reply(input: AiReplyInput): Promise<ChatMessage> {
-    const response = await fetch('/api/ai/chat', {
+    const response = await fetch(apiUrl('/api/ai/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: input.signal,
@@ -75,7 +76,7 @@ export async function fetchAiStatus(): Promise<{
   baseUrlHost?: string
 }> {
   try {
-    const res = await fetch('/api/ai/status')
+    const res = await fetch(apiUrl('/api/ai/status'))
     if (!res.ok) {
       return { configured: false, kind: 'unavailable', model: null }
     }

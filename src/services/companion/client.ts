@@ -1,3 +1,5 @@
+import { apiUrl, wsUrl } from '../../lib/apiBase'
+
 const TOKEN_KEY = 'mol_companion_token'
 const PROFILE_KEY = 'mol_companion_profile'
 
@@ -12,6 +14,7 @@ export interface CompanionStatus {
   available: boolean
   kind: string
   publicOpen: boolean
+  inviteRequired?: boolean
   note?: string
 }
 
@@ -45,7 +48,7 @@ function saveProfile(profile: CompanionProfile) {
 
 export async function fetchCompanionStatus(): Promise<CompanionStatus> {
   try {
-    const res = await fetch('/api/companion/status')
+    const res = await fetch(apiUrl('/api/companion/status'))
     if (!res.ok) return { available: false, kind: 'unavailable', publicOpen: false }
     return parse<CompanionStatus>(res)
   } catch {
@@ -56,10 +59,10 @@ export async function fetchCompanionStatus(): Promise<CompanionStatus> {
 export async function ensureGuestProfile(input?: {
   nickname?: string
   adultAcknowledged?: boolean
+  inviteCode?: string
 }): Promise<CompanionProfile> {
   const existing = loadStoredProfile()
   if (existing?.token) {
-    // Soft validate by listing requests; if 401, re-issue.
     try {
       await api('/api/companion/requests', { method: 'GET' }, existing.token)
       return existing
@@ -70,12 +73,13 @@ export async function ensureGuestProfile(input?: {
   if (!input?.adultAcknowledged) {
     throw new Error('请先确认成年声明后进入受控真人试点。')
   }
-  const res = await fetch('/api/companion/auth/guest', {
+  const res = await fetch(apiUrl('/api/companion/auth/guest'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       nickname: input.nickname,
       adultAcknowledged: true,
+      inviteCode: input.inviteCode,
     }),
   })
   const data = await parse<{
@@ -106,7 +110,7 @@ export async function api<T>(
   if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  const res = await fetch(path, { ...init, headers })
+  const res = await fetch(apiUrl(path), { ...init, headers })
   return parse<T>(res)
 }
 
@@ -114,9 +118,8 @@ export function connectCompanionSocket(
   token: string,
   onEvent: (event: { type: string; payload?: unknown }) => void,
 ) {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const ws = new WebSocket(
-    `${proto}://${location.host}/api/companion/ws?token=${encodeURIComponent(token)}`,
+    wsUrl(`/api/companion/ws?token=${encodeURIComponent(token)}`),
   )
   ws.onmessage = (ev) => {
     try {

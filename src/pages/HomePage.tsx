@@ -52,8 +52,7 @@ export function HomePage() {
       <SafetyNotice />
 
       <p className="text-xs text-[var(--color-ink-soft)]">
-        AI
-        可通过服务端代理接入真实大模型（需配置密钥）；未配置时使用明确标注的演示适配器。真人匹配仍为演示，不伪造真实在线人数。
+        AI 可通过服务端代理接入真实大模型（需配置密钥）；未配置时使用明确标注的演示适配器。真人善意通道为受控试点（live-controlled），尚未对公众无限制开放；不伪造真实在线人数。
       </p>
     </div>
   )

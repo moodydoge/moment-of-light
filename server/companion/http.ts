@@ -1,6 +1,28 @@
-import { issueGuestToken, readBearer, verifyGuestToken } from './auth'
+import {
+  inviteCodeRequired,
+  issueGuestToken,
+  readBearer,
+  verifyGuestToken,
+} from './auth'
 import { broadcastAll, broadcastToUsers } from './hub'
 import { companionStore } from './store'
+
+function requireAdmin(request: Request) {
+  const expected = process.env.MOL_COMPANION_ADMIN_TOKEN?.trim()
+  if (!expected) {
+    throw Object.assign(new Error('未配置管理者令牌（MOL_COMPANION_ADMIN_TOKEN）。'), {
+      status: 503,
+      code: 'ADMIN_NOT_CONFIGURED',
+    })
+  }
+  const got = request.headers.get('x-mol-admin-token')?.trim()
+  if (!got || got !== expected) {
+    throw Object.assign(new Error('管理者鉴权失败。'), {
+      status: 401,
+      code: 'ADMIN_UNAUTHORIZED',
+    })
+  }
+}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -35,15 +57,21 @@ export async function handleCompanionApiRequest(request: Request): Promise<Respo
         available: true,
         kind: 'live-controlled',
         publicOpen: false,
-        note: '受控试点：服务端签发身份 + SQLite + WebSocket。尚未对公众开放无限制陌生人匹配。',
+        inviteRequired: inviteCodeRequired(),
+        note: '受控试点：服务端签发身份 + SQLite + WebSocket。尚未对公众开放无限制陌生人匹配。邀请码准入不等于可信实名认证，也不等于年龄核验。',
       })
     }
 
     if (request.method === 'POST' && path === '/api/companion/auth/guest') {
-      const body = await readBody<{ nickname?: string; adultAcknowledged?: boolean }>(request)
+      const body = await readBody<{
+        nickname?: string
+        adultAcknowledged?: boolean
+        inviteCode?: string
+      }>(request)
       const issued = issueGuestToken({
         nickname: body.nickname,
         adultAcknowledged: Boolean(body.adultAcknowledged),
+        inviteCode: body.inviteCode,
       })
       companionStore.ensureUser(issued.identity)
       return json({
@@ -52,6 +80,9 @@ export async function handleCompanionApiRequest(request: Request): Promise<Respo
         nickname: issued.identity.nickname,
         kind: 'live-controlled',
         adultNote: '年龄声明不等于严格年龄核验；本受控试点仅面向成年人。',
+        inviteNote: inviteCodeRequired()
+          ? '已通过邀请码准入；这不是实名认证或年龄核验。'
+          : undefined,
       })
     }
 
@@ -131,7 +162,7 @@ export async function handleCompanionApiRequest(request: Request): Promise<Respo
       const user = requireUser(request)
       const sessionId = path.split('/')[4]
       const body = await readBody<{ content?: string; clientMessageId?: string }>(request)
-      const msg = companionStore.sendMessage(user, {
+      const { message: msg, crisisTip } = companionStore.sendMessage(user, {
         sessionId,
         content: body.content || '',
         clientMessageId: body.clientMessageId || '',
@@ -141,7 +172,13 @@ export async function handleCompanionApiRequest(request: Request): Promise<Respo
         type: 'message_created',
         payload: { sessionId, message: msg },
       })
-      return json(msg)
+      if (crisisTip) {
+        broadcastToUsers([session.requesterId, session.responderId], {
+          type: 'message_created',
+          payload: { sessionId, message: crisisTip },
+        })
+      }
+      return json({ ...msg, crisisTipAttached: Boolean(crisisTip) })
     }
 
     if (request.method === 'POST' && path.match(/^\/api\/companion\/sessions\/[^/]+\/end$/)) {
@@ -196,6 +233,19 @@ export async function handleCompanionApiRequest(request: Request): Promise<Respo
     if (request.method === 'GET' && path === '/api/companion/ai-tip') {
       requireUser(request)
       return json({ tip: companionStore.topicSuggestion(), sharedToChat: false })
+    }
+
+    if (request.method === 'GET' && path === '/api/companion/admin/reports') {
+      requireAdmin(request)
+      const limit = Number(new URL(request.url).searchParams.get('limit') || 50)
+      return json({ items: companionStore.listReports(limit) })
+    }
+
+    if (request.method === 'POST' && path.match(/^\/api\/companion\/admin\/reports\/[^/]+\/review$/)) {
+      requireAdmin(request)
+      const reportId = path.split('/')[5]
+      const body = await readBody<{ note?: string }>(request).catch(() => ({ note: 'reviewed' }))
+      return json(companionStore.markReportReviewed(reportId, body.note || 'reviewed'))
     }
 
     return json({ error: 'Not found', code: 'NOT_FOUND' }, 404)

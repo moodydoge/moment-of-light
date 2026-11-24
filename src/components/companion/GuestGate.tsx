@@ -11,9 +11,11 @@ export function GuestGate({
 }) {
   const { profile, bootstrapGuest, status } = useCompanion()
   const [nickname, setNickname] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [adult, setAdult] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const inviteRequired = Boolean(status?.inviteRequired)
 
   if (profile) return null
 
@@ -33,6 +35,18 @@ export function GuestGate({
           placeholder="例如：窗边的人"
         />
       </label>
+      {inviteRequired ? (
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-[var(--color-ink-soft)]">邀请码（组织者发放）</span>
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value.slice(0, 64))}
+            className="w-full rounded-[var(--radius-input)] border border-[var(--color-line)] bg-[var(--color-page)] px-3 py-2.5"
+            placeholder="请输入邀请码"
+            autoComplete="off"
+          />
+        </label>
+      ) : null}
       <label className="mt-3 flex min-h-11 items-start gap-2 text-sm text-[var(--color-ink-soft)]">
         <input
           type="checkbox"
@@ -52,11 +66,15 @@ export function GuestGate({
       <div className="mt-4">
         <Button
           fullWidth
-          disabled={!adult || busy}
+          disabled={!adult || busy || (inviteRequired && !inviteCode.trim())}
           onClick={() => {
             setBusy(true)
             setError(null)
-            void bootstrapGuest({ nickname, adultAcknowledged: true })
+            void bootstrapGuest({
+              nickname,
+              adultAcknowledged: true,
+              inviteCode: inviteRequired ? inviteCode.trim() : undefined,
+            })
               .then(() => onReady?.())
               .catch((err) => setError(err instanceof Error ? err.message : '进入失败'))
               .finally(() => setBusy(false))

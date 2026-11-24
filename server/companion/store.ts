@@ -1,10 +1,18 @@
 import { randomBytes } from 'node:crypto'
 import type { GuestIdentity } from './auth'
 import { getDb } from './db'
+import {
+  HUMAN_CRISIS_TIP,
+  containsContactLeak,
+  containsCrisis,
+} from './safety'
 
 const REQUEST_TTL_MS = 10 * 60_000
 const MAX_MSG_LEN = 500
 const MIN_SEND_INTERVAL_MS = 800
+const RATE_WINDOW_MS = 60_000
+const MAX_OPEN_PER_WINDOW = 3
+const MAX_APPLY_PER_WINDOW = 8
 
 export type RequestStatus =
   | 'open'
@@ -27,6 +35,29 @@ function nowIso() {
 
 export class CompanionStore {
   private lastSend = new Map<string, number>()
+  private openBuckets = new Map<string, { count: number; windowStart: number }>()
+  private applyBuckets = new Map<string, { count: number; windowStart: number }>()
+
+  private hitRate(
+    map: Map<string, { count: number; windowStart: number }>,
+    key: string,
+    max: number,
+  ) {
+    const now = Date.now()
+    const bucket = map.get(key) ?? { count: 0, windowStart: now }
+    if (now - bucket.windowStart > RATE_WINDOW_MS) {
+      bucket.count = 0
+      bucket.windowStart = now
+    }
+    if (bucket.count >= max) {
+      throw Object.assign(new Error('操作过于频繁，请稍后再试。'), {
+        status: 429,
+        code: 'RATE_LIMITED',
+      })
+    }
+    bucket.count += 1
+    map.set(key, bucket)
+  }
 
   ensureUser(identity: GuestIdentity) {
     const db = getDb()
@@ -70,8 +101,12 @@ export class CompanionStore {
 
   openRequest(identity: GuestIdentity, topicTag: string) {
     this.ensureUser(identity)
+    this.hitRate(this.openBuckets, identity.userId, MAX_OPEN_PER_WINDOW)
     this.expireDueRequests()
     const tag = topicTag.trim().slice(0, 40) || '轻量陪伴'
+    if (containsContactLeak(tag) || containsCrisis(tag)) {
+      throw new Error('公开请求仅可使用轻度主题标签，请勿填写联系方式或危机求助内容。')
+    }
     const db = getDb()
     // Cancel previous open requests from same owner.
     db.prepare(
@@ -138,6 +173,7 @@ export class CompanionStore {
 
   applyToRequest(identity: GuestIdentity, requestId: string) {
     this.ensureUser(identity)
+    this.hitRate(this.applyBuckets, identity.userId, MAX_APPLY_PER_WINDOW)
     this.expireDueRequests()
     const ownerId = this.ownerOf(requestId)
     if (!ownerId) throw new Error('请求不存在。')
@@ -380,6 +416,11 @@ export class CompanionStore {
     const content = input.content.trim()
     if (!content) throw new Error('消息不能为空。')
     if (content.length > MAX_MSG_LEN) throw new Error(`消息请控制在 ${MAX_MSG_LEN} 字以内。`)
+    if (containsContactLeak(content)) {
+      throw new Error(
+        '为保护隐私，请勿在对话中发送手机号、微信号、链接等联系方式。如需线下支持，请自行通过可信渠道。',
+      )
+    }
     const clientMessageId = input.clientMessageId.trim().slice(0, 64)
     if (!clientMessageId) throw new Error('缺少 clientMessageId。')
 
@@ -391,7 +432,9 @@ export class CompanionStore {
          FROM chat_messages WHERE session_id = ? AND client_message_id = ?`,
       )
       .get(input.sessionId, clientMessageId)
-    if (existing) return existing
+    if (existing) {
+      return { message: existing, crisisTip: null as null }
+    }
 
     const key = `${identity.userId}:${input.sessionId}`
     const last = this.lastSend.get(key) || 0
@@ -414,7 +457,63 @@ export class CompanionStore {
        (id, session_id, sender_id, sender_role, content, created_at, client_message_id)
        VALUES (@id, @sessionId, @senderId, @senderRole, @content, @createdAt, @clientMessageId)`,
     ).run(msg)
-    return msg
+
+    let crisisTip: {
+      id: string
+      sessionId: string
+      senderId: string
+      senderRole: string
+      content: string
+      createdAt: string
+      clientMessageId: string
+    } | null = null
+    if (containsCrisis(content)) {
+      crisisTip = {
+        id: id('msg'),
+        sessionId: input.sessionId,
+        senderId: 'system',
+        senderRole: 'system',
+        content: HUMAN_CRISIS_TIP,
+        createdAt: nowIso(),
+        clientMessageId: `crisis_${clientMessageId}`,
+      }
+      db.prepare(
+        `INSERT INTO chat_messages
+         (id, session_id, sender_id, sender_role, content, created_at, client_message_id)
+         VALUES (@id, @sessionId, @senderId, @senderRole, @content, @createdAt, @clientMessageId)`,
+      ).run(crisisTip)
+    }
+
+    return { message: msg, crisisTip }
+  }
+
+  listReports(limit = 50) {
+    const db = getDb()
+    return db
+      .prepare(
+        `SELECT id, actor_id as actorId, target_user_id as targetUserId,
+                session_id as sessionId, type, reason, created_at as createdAt
+         FROM safety_actions
+         WHERE type = 'report'
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(Math.min(Math.max(limit, 1), 200))
+  }
+
+  markReportReviewed(reportId: string, note = 'reviewed') {
+    const db = getDb()
+    const existing = db
+      .prepare(`SELECT id FROM safety_actions WHERE id = ? AND type = 'report'`)
+      .get(reportId) as { id: string } | undefined
+    if (!existing) throw new Error('举报记录不存在。')
+    const reviewId = id('rvw')
+    db.prepare(
+      `INSERT INTO safety_actions
+       (id, actor_id, target_user_id, session_id, type, reason, created_at)
+       VALUES (?, 'admin', NULL, NULL, 'report_review', ?, ?)`,
+    ).run(reviewId, `${note.slice(0, 120)} · ref:${reportId}`, nowIso())
+    return { id: reviewId, reportId, ok: true as const }
   }
 
   endSession(identity: GuestIdentity, sessionId: string, reason = 'user_end') {
